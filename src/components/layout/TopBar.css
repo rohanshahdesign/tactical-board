@@ -1,0 +1,186 @@
+.topbar-left {
+  position: absolute;
+  left: 20px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.topbar-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topbar-right {
+  position: absolute;
+  right: 20px;
+  display: flex;
+  align-items: center;
+}
+
+/* Icon buttons (undo/redo/reset) */
+.topbar-icon-btn {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.topbar-icon-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+/* Mode pill toggle (3D / 2D) */
+.mode-pill {
+  display: flex;
+  background: var(--surface-3);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.pill-btn {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.pill-btn.active {
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.pill-btn:hover:not(.active) {
+  color: var(--text-primary);
+}
+
+/* Animate toggle */
+.animate-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.animate-toggle.active {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+}
+
+.animate-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.animate-toggle.active .animate-label {
+  color: var(--text-primary);
+}
+
+.animate-dot {
+  width: 18px;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--surface-4);
+  position: relative;
+  transition: all 0.2s;
+}
+
+.animate-dot::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  top: 1px;
+  left: 1px;
+  transition: all 0.2s;
+}
+
+.animate-dot.on {
+  background: var(--accent);
+}
+
+.animate-dot.on::after {
+  background: #ffffff;
+  left: 9px;
+}
+
+/* Divider */
+.topbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--panel-border);
+  margin: 0 4px;
+}
+
+/* Text buttons (Snapshot, Export) */
+.topbar-text-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.topbar-text-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.topbar-text-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent-text);
+}
+
+/* Play button */
+.topbar-play-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  border: none;
+  border-radius: 50%;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 44%, transparent);
+}
+
+.topbar-play-btn:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--accent) 60%, transparent);
+}

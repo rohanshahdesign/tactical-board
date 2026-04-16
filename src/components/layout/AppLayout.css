@@ -1,0 +1,178 @@
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 18%, transparent), transparent 32%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg) 88%, white 12%) 0%, var(--bg) 100%);
+  color: var(--text-primary);
+  font-family: var(--sans);
+}
+
+.app-topbar {
+  height: 52px;
+  min-height: 52px;
+  background: var(--bg-elevated);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px;
+  gap: 8px;
+  z-index: 100;
+  position: relative;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.app-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.app-left-panel {
+  width: 74px;
+  min-width: 74px;
+  max-height: calc(100vh - 52px - 56px);
+  background: var(--panel-bg);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px;
+  margin: 10px;
+  margin-right: 0;
+  z-index: 20;
+  position: relative;
+  box-shadow: var(--panel-shadow);
+  transition: width 0.22s ease, min-width 0.22s ease, padding 0.22s ease;
+}
+
+.app-viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: var(--viewport-bg);
+  min-width: 0;
+}
+
+.app-right-panel {
+  width: 328px;
+  min-width: 328px;
+  max-height: calc(100vh - 52px - 56px);
+  background: var(--panel-bg);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px;
+  margin: 10px;
+  margin-left: 0;
+  z-index: 20;
+  position: relative;
+  box-shadow: var(--panel-shadow);
+  transition: width 0.22s ease, min-width 0.22s ease, padding 0.22s ease;
+}
+
+.app-bottom-panel {
+  height: 56px;
+  min-height: 56px;
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--panel-border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 12px;
+  z-index: 100;
+}
+
+.app-left-panel.collapsed,
+.app-right-panel.collapsed {
+  width: 52px;
+  min-width: 52px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-panel-toggle {
+  position: absolute;
+  top: 12px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  background: color-mix(in srgb, var(--panel-bg) 88%, transparent);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  z-index: 2;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.app-panel-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  transform: scale(1.04);
+}
+
+.app-panel-toggle.left {
+  right: 10px;
+}
+
+.app-panel-toggle.right {
+  left: 10px;
+}
+
+.app-left-panel.collapsed .app-panel-toggle.left,
+.app-right-panel.collapsed .app-panel-toggle.right {
+  position: static;
+}
+
+.app-panel-rail-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  letter-spacing: 0.18em;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+/* Scrollbar styling for panels */
+.app-left-panel::-webkit-scrollbar,
+.app-right-panel::-webkit-scrollbar {
+  width: 4px;
+}
+
+.app-left-panel::-webkit-scrollbar-track,
+.app-right-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-left-panel::-webkit-scrollbar-thumb,
+.app-right-panel::-webkit-scrollbar-thumb {
+  background: var(--surface-4);
+  border-radius: 2px;
+}
+
+@media (max-width: 960px) {
+  .app-left-panel {
+    width: 74px;
+    min-width: 74px;
+  }
+
+  .app-right-panel {
+    width: 280px;
+    min-width: 280px;
+  }
+}

@@ -1,0 +1,74 @@
+.left-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  height: 100%;
+  gap: 0;
+}
+
+.lp-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.lp-toolbar-btn {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid var(--panel-border);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.lp-toolbar-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.lp-toolbar-btn.active {
+  background: color-mix(in srgb, var(--accent) 82%, #10281b 18%);
+  border-color: color-mix(in srgb, var(--accent) 68%, white 32%);
+  color: #ffffff;
+}
+
+.lp-toolbar-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.lp-eyebrow {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--text-subtle);
+  margin-bottom: 4px;
+}
+
+.lp-heading {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.lp-tool-chip {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--surface-1);
+  border: 1px solid var(--panel-border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: normal;
+  text-align: center;
+}
