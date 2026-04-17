@@ -34,6 +34,26 @@ interface Player3DProps {
   onMove: (pos: Position2D) => void;
 }
 
+const MOVEMENT_EPSILON = 0.001;
+
+function getMovementDelta(from: Position2D, to: Position2D) {
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+
+  return {
+    dx,
+    dz,
+    distance: Math.hypot(dx, dz),
+  };
+}
+
+function getMovementYaw(from: Position2D, to: Position2D, yawOffset: number) {
+  const fromStadiumPosition = toStadiumSpace(from);
+  const toStadiumPosition = toStadiumSpace(to);
+  const { dx, dz } = getMovementDelta(fromStadiumPosition, toStadiumPosition);
+  return Math.atan2(dx, dz) + yawOffset;
+}
+
 const createKitMaterial = (
   sourceMaterial: THREE.Material | THREE.Material[] | undefined,
   kitColor: string,
@@ -210,35 +230,71 @@ export const Player3D: React.FC<Player3DProps> = React.memo(({
   const activeTool = useTacticalStore((s) => s.activeTool);
   const runModelScale = useTacticalStore((s) => s.runModelScale);
   const runModelYOffset = useTacticalStore((s) => s.runModelYOffset);
+  const runModelYawOffset = useTacticalStore((s) => s.runModelYawOffset);
   const cameraMode = useTacticalStore((s) => s.camera.mode);
+  const previousPlaybackPositionRef = useRef<Position2D | null>(null);
+  const lastRunYawRef = useRef(runModelYawOffset);
 
   const motion = useMemo(() => {
     if (playbackState !== 'playing') {
-      return { isRunning: false, yaw: 0 };
+      return { isRunning: false, yaw: lastRunYawRef.current };
     }
 
     const currentFrame = frames[currentFrameIndex];
     const nextFrame = frames[currentFrameIndex + 1];
     if (!currentFrame || !nextFrame) {
-      return { isRunning: false, yaw: 0 };
+      return { isRunning: false, yaw: lastRunYawRef.current };
     }
 
     const fromState = currentFrame.playerStates.find((ps) => ps.playerId === player.id);
     const toState = nextFrame.playerStates.find((ps) => ps.playerId === player.id);
     if (!fromState || !toState) {
-      return { isRunning: false, yaw: 0 };
+      return { isRunning: false, yaw: lastRunYawRef.current };
     }
 
-    const dx = toState.position.x - fromState.position.x;
-    const dz = toState.position.z - fromState.position.z;
-    const distance = Math.hypot(dx, dz);
-    const shouldRun = distance > 0.05 && toState.movementType === 'run';
+    const previousPlaybackPosition = previousPlaybackPositionRef.current;
+    const liveMovement = previousPlaybackPosition
+      ? getMovementDelta(previousPlaybackPosition, player.position)
+      : null;
+    const segmentMovement = getMovementDelta(fromState.position, toState.position);
+    const hasMovement =
+      (liveMovement?.distance ?? 0) > MOVEMENT_EPSILON ||
+      segmentMovement.distance > MOVEMENT_EPSILON;
+    const shouldRun = hasMovement && toState.movementType === 'run';
+
+    if (!shouldRun) {
+      return { isRunning: false, yaw: lastRunYawRef.current };
+    }
+
+    const yaw =
+      liveMovement && liveMovement.distance > MOVEMENT_EPSILON
+        ? getMovementYaw(previousPlaybackPosition!, player.position, runModelYawOffset)
+        : getMovementYaw(fromState.position, toState.position, runModelYawOffset);
+
+    lastRunYawRef.current = yaw;
 
     return {
-      isRunning: shouldRun,
-      yaw: shouldRun ? Math.atan2(dx, dz) : 0,
+      isRunning: true,
+      yaw,
     };
-  }, [playbackState, frames, currentFrameIndex, player.id]);
+  }, [
+    playbackState,
+    frames,
+    currentFrameIndex,
+    player.id,
+    player.position,
+    runModelYawOffset,
+  ]);
+
+  useEffect(() => {
+    if (playbackState !== 'playing') {
+      previousPlaybackPositionRef.current = null;
+      lastRunYawRef.current = runModelYawOffset;
+      return;
+    }
+
+    previousPlaybackPositionRef.current = { ...player.position };
+  }, [playbackState, player.position, runModelYawOffset]);
 
   const stopDragging = useCallback((pointerId?: number) => {
     if (pointerId !== undefined && activePointerIdRef.current !== pointerId) {

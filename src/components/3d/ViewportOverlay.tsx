@@ -73,13 +73,13 @@ export const ViewportOverlay: React.FC = () => {
           >
             Top
           </button>
-          <button
+          {/* <button
             type="button"
             className={`vo-camera-btn ${camera.mode === 'free' && camera.preset === 'angled' ? 'active' : ''}`}
             onClick={() => activateFreePreset('angled')}
           >
             Angled
-          </button>
+          </button> */}
           <button
             type="button"
             className={`vo-camera-btn ${camera.mode === 'free' && camera.preset === 'player-perspective' ? 'active' : ''}`}

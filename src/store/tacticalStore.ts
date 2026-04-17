@@ -190,7 +190,7 @@ export const useTacticalStore = create<TacticalStore>()(
       loop: false,
       runModelScale: 3,
       runModelYOffset: -1.9,
-      runModelYawOffset: -Math.PI / 2,
+      runModelYawOffset: 0,
       camera: { ...initialCamera },
       selection: { type: null, id: null },
       formations: [...DEFAULT_FORMATIONS],
