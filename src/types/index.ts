@@ -182,6 +182,7 @@ export type ActiveTool =
   | 'select'
   | 'place-player'
   | 'place-object'
+  | 'place-ball'
   | 'place-annotation'
   | 'draw';
 

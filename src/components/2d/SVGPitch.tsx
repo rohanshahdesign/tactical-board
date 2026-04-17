@@ -1,6 +1,7 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { useTacticalStore } from '../../store/tacticalStore';
 import { PITCH, PitchObjectType, Position2D } from '../../types';
+import { getAttachedBallPosition } from '../../utils/ball';
 import {
   DEBUG_2D_BORDER_VISIBLE,
   PITCH_2D_DEBUG_LENGTH,
@@ -52,6 +53,7 @@ export const SVGPitch: React.FC = () => {
   const addObject = useTacticalStore((s) => s.addObject);
   const addAnnotation = useTacticalStore((s) => s.addAnnotation);
   const movePlayer = useTacticalStore((s) => s.movePlayer);
+  const moveBall = useTacticalStore((s) => s.moveBall);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -116,7 +118,7 @@ export const SVGPitch: React.FC = () => {
     ? players.find((p) => p.id === ball.ownerId)
     : null;
   const ballSvg = ballOwner
-    ? toSvg({ x: ballOwner.position.x + 1, z: ballOwner.position.z })
+    ? toSvg(getAttachedBallPosition(ballOwner))
     : toSvg(ball.position);
 
   return (
@@ -132,9 +134,16 @@ export const SVGPitch: React.FC = () => {
         const payload = event.dataTransfer.getData('application/x-tactical-object');
         if (!payload) return;
         event.preventDefault();
-        const parsed = JSON.parse(payload) as { type: PitchObjectType };
+        const parsed = JSON.parse(payload) as
+          | { kind: 'ball'; mode: '2D' | '3D' }
+          | { kind: 'object'; type: PitchObjectType; mode: '2D' | '3D' };
         const worldPos = getWorldFromClient(event.clientX, event.clientY);
         if (worldPos) {
+          if (parsed.kind === 'ball') {
+            moveBall(worldPos);
+            return;
+          }
+
           addObject(parsed.type, worldPos);
         }
       }}
@@ -168,6 +177,11 @@ export const SVGPitch: React.FC = () => {
 
             if (activeTool === 'place-object') {
               addObject(objectPlacementType, worldPos);
+              return;
+            }
+
+            if (activeTool === 'place-ball') {
+              moveBall(worldPos);
               return;
             }
 

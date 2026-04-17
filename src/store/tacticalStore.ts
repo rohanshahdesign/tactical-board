@@ -23,6 +23,7 @@ import {
   PITCH,
 } from '../types';
 import { DEFAULT_FORMATIONS } from '../data/formations';
+import { getAttachedBallPosition } from '../utils/ball';
 
 export interface TacticalStore {
   // --- Mode ---
@@ -277,8 +278,16 @@ export const useTacticalStore = create<TacticalStore>()(
         })),
 
       movePlayer: (id, position) => {
-        const { animationEnabled, currentFrameIndex, frames, mode } = get();
+        const { animationEnabled, currentFrameIndex, frames, mode, players, ball } = get();
         const nextPosition = resolvePlayerPositionForMode(mode, position);
+        const movingPlayer = players.find((player) => player.id === id);
+        const attachedBallPosition =
+          movingPlayer && ball.ownerId === id
+            ? getAttachedBallPosition({
+                position: nextPosition,
+                team: movingPlayer.team,
+              })
+            : null;
 
         if (animationEnabled && frames.length > 0) {
           // Update frame state
@@ -293,6 +302,10 @@ export const useTacticalStore = create<TacticalStore>()(
             updatedFrames[currentFrameIndex] = {
               ...frame,
               playerStates: updatedStates,
+              ballState:
+                frame.ballState.mode === 'attached' && frame.ballState.ownerId === id && attachedBallPosition
+                  ? { ...frame.ballState, position: attachedBallPosition }
+                  : frame.ballState,
             };
             set({ frames: updatedFrames });
           }
@@ -303,6 +316,10 @@ export const useTacticalStore = create<TacticalStore>()(
           players: state.players.map((p) =>
             p.id === id ? { ...p, position: nextPosition } : p
           ),
+          ball:
+            state.ball.mode === 'attached' && state.ball.ownerId === id && attachedBallPosition
+              ? { ...state.ball, position: attachedBallPosition }
+              : state.ball,
         }));
       },
 
@@ -370,10 +387,11 @@ export const useTacticalStore = create<TacticalStore>()(
       // --- Ball ---
       attachBall: (playerId) =>
         set((state) => {
+          const owner = state.players.find((player) => player.id === playerId);
           const nextBall: Ball = {
             mode: 'attached',
             ownerId: playerId,
-            position: { x: 0, z: 0 },
+            position: owner ? getAttachedBallPosition(owner) : state.ball.position,
           };
 
           const currentFrame = state.frames[state.currentFrameIndex];
@@ -401,7 +419,7 @@ export const useTacticalStore = create<TacticalStore>()(
             mode: 'free',
             ownerId: null,
             position: owner
-              ? { ...owner.position }
+              ? getAttachedBallPosition(owner)
               : state.ball.position,
           };
 
@@ -447,10 +465,11 @@ export const useTacticalStore = create<TacticalStore>()(
 
       passBall: (targetPlayerId) =>
         set((state) => {
+          const targetPlayer = state.players.find((player) => player.id === targetPlayerId);
           const nextBall: Ball = {
             mode: 'attached',
             ownerId: targetPlayerId,
-            position: { x: 0, z: 0 },
+            position: targetPlayer ? getAttachedBallPosition(targetPlayer) : state.ball.position,
           };
 
           const currentFrame = state.frames[state.currentFrameIndex];

@@ -14,22 +14,28 @@ type ActionOption = {
 
 type RightPanelTab = 'properties' | 'formations' | 'objects';
 
-const OBJECT_LIBRARY: Record<'2D' | '3D', Array<{ type: PitchObjectType; label: string; copy: string }>> = {
+type PlacementAsset =
+  | { kind: 'object'; type: PitchObjectType; label: string; copy: string }
+  | { kind: 'ball'; label: string; copy: string };
+
+const OBJECT_LIBRARY: Record<'2D' | '3D', PlacementAsset[]> = {
   '2D': [
-    { type: 'cone', label: '2D Cone', copy: 'Flat training marker' },
-    { type: 'marker', label: '2D Flag', copy: 'Sideline style marker' },
-    { type: 'hurdle', label: '2D Hurdle', copy: 'Agility hurdle asset' },
-    { type: 'blocker', label: '2D Blocker', copy: 'Wall / mannequin' },
-    { type: 'pole', label: '2D Pole', copy: 'Reference pole' },
-    { type: 'training-ladder', label: '2D Ladder', copy: 'Flat ladder guide' },
+    { kind: 'ball', label: 'Soccer Ball', copy: 'Place the live match ball on the pitch' },
+    { kind: 'object', type: 'cone', label: '2D Cone', copy: 'Flat training marker' },
+    { kind: 'object', type: 'marker', label: '2D Flag', copy: 'Sideline style marker' },
+    { kind: 'object', type: 'hurdle', label: '2D Hurdle', copy: 'Agility hurdle asset' },
+    { kind: 'object', type: 'blocker', label: '2D Blocker', copy: 'Wall / mannequin' },
+    { kind: 'object', type: 'pole', label: '2D Pole', copy: 'Reference pole' },
+    { kind: 'object', type: 'training-ladder', label: '2D Ladder', copy: 'Flat ladder guide' },
   ],
   '3D': [
-    { type: 'cone', label: '3D Cone', copy: 'Low-poly cone' },
-    { type: 'marker', label: '3D Flag', copy: 'Raised flag marker' },
-    { type: 'hurdle', label: '3D Hurdle', copy: 'Jump training prop' },
-    { type: 'blocker', label: '3D Blocker', copy: 'Wall / mannequin' },
-    { type: 'pole', label: '3D Pole', copy: 'Height reference prop' },
-    { type: 'training-ladder', label: '3D Ladder', copy: 'Ground agility ladder' },
+    { kind: 'ball', label: 'Soccer Ball', copy: 'GLB match ball with connected playback support' },
+    { kind: 'object', type: 'cone', label: '3D Cone', copy: 'Low-poly cone' },
+    { kind: 'object', type: 'marker', label: '3D Flag', copy: 'Raised flag marker' },
+    { kind: 'object', type: 'hurdle', label: '3D Hurdle', copy: 'Jump training prop' },
+    { kind: 'object', type: 'blocker', label: '3D Blocker', copy: 'Wall / mannequin' },
+    { kind: 'object', type: 'pole', label: '3D Pole', copy: 'Height reference prop' },
+    { kind: 'object', type: 'training-ladder', label: '3D Ladder', copy: 'Ground agility ladder' },
   ],
 };
 
@@ -525,14 +531,26 @@ const ObjectsPanel: React.FC<{ mode: '2D' | '3D' }> = ({ mode }) => {
       <div className="rp-object-grid-panel">
         {objectAssets.map((asset) => (
           <button
-            key={`${mode}-${asset.type}`}
+            key={`${mode}-${asset.kind === 'ball' ? 'ball' : asset.type}`}
             className="rp-object-asset-card"
             draggable
             onDragStart={(event) => {
-              event.dataTransfer.setData('application/x-tactical-object', JSON.stringify({ type: asset.type, mode }));
+              event.dataTransfer.setData(
+                'application/x-tactical-object',
+                JSON.stringify(
+                  asset.kind === 'ball'
+                    ? { kind: 'ball', mode }
+                    : { kind: 'object', type: asset.type, mode }
+                )
+              );
               event.dataTransfer.effectAllowed = 'copy';
             }}
             onClick={() => {
+              if (asset.kind === 'ball') {
+                setActiveTool('place-ball');
+                return;
+              }
+
               setObjectPlacementType(asset.type);
               setActiveTool('place-object');
             }}

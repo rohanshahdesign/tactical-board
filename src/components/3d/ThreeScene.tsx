@@ -24,6 +24,7 @@ export const ThreeScene: React.FC = () => {
   const theme = useTacticalStore((s) => s.theme);
   const clearSelection = useTacticalStore((s) => s.clearSelection);
   const addObject = useTacticalStore((s) => s.addObject);
+  const moveBall = useTacticalStore((s) => s.moveBall);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasStateRef = useRef<RootState | null>(null);
 
@@ -66,9 +67,16 @@ export const ThreeScene: React.FC = () => {
         const payload = event.dataTransfer.getData('application/x-tactical-object');
         if (!payload) return;
         event.preventDefault();
-        const parsed = JSON.parse(payload) as { type: PitchObjectType };
+        const parsed = JSON.parse(payload) as
+          | { kind: 'ball'; mode: '2D' | '3D' }
+          | { kind: 'object'; type: PitchObjectType; mode: '2D' | '3D' };
         const worldPos = getWorldFromClient(event.clientX, event.clientY);
         if (worldPos) {
+          if (parsed.kind === 'ball') {
+            moveBall(worldPos);
+            return;
+          }
+
           addObject(parsed.type, worldPos);
         }
       }}
@@ -205,6 +213,7 @@ const SceneContents: React.FC<SceneContentsProps> = ({ theme }) => {
   const addObject = useTacticalStore((s) => s.addObject);
   const addAnnotation = useTacticalStore((s) => s.addAnnotation);
   const movePlayer = useTacticalStore((s) => s.movePlayer);
+  const moveBall = useTacticalStore((s) => s.moveBall);
   const controlsRef = useRef<any>(null);
   const [optionDragEnabled, setOptionDragEnabled] = useState(false);
 
@@ -234,6 +243,11 @@ const SceneContents: React.FC<SceneContentsProps> = ({ theme }) => {
 
     if (activeTool === 'place-object') {
       addObject(objectPlacementType, worldPos);
+      return;
+    }
+
+    if (activeTool === 'place-ball') {
+      moveBall(worldPos);
       return;
     }
 

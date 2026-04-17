@@ -105,6 +105,8 @@ function toolLabel(tool: ActiveTool): string {
       return 'Player tool';
     case 'place-object':
       return 'Object tool';
+    case 'place-ball':
+      return 'Ball tool';
     case 'place-annotation':
       return 'Text tool';
     case 'draw':
