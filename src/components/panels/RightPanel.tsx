@@ -180,6 +180,7 @@ const PlayerPropertiesPanel: React.FC<{ player: Player; detailed: boolean }> = (
   const detachBall = useTacticalStore((s) => s.detachBall);
   const ball = useTacticalStore((s) => s.ball);
   const players = useTacticalStore((s) => s.players);
+  const mode = useTacticalStore((s) => s.mode);
   const animationEnabled = useTacticalStore((s) => s.animationEnabled);
   const currentFrameIndex = useTacticalStore((s) => s.currentFrameIndex);
   const frames = useTacticalStore((s) => s.frames);
@@ -214,6 +215,14 @@ const PlayerPropertiesPanel: React.FC<{ player: Player; detailed: boolean }> = (
       updatePlayerFrameState(currentFrameIndex, player.id, {
         action: getDefaultAction(player.role, false),
       });
+    }
+  };
+
+  const handleDebugPass = () => {
+    attachBall(player.id);
+
+    if (animationEnabled && frameState) {
+      updatePlayerFrameState(currentFrameIndex, player.id, { action: 'pass-inside' });
     }
   };
 
@@ -371,6 +380,11 @@ const PlayerPropertiesPanel: React.FC<{ player: Player; detailed: boolean }> = (
               {currentOwner ? 'Take Ball' : 'Connect Ball'}
             </button>
           )}
+          {mode === '3D' && animationEnabled && frameState && player.role === 'outfield' ? (
+            <button className="rp-action-btn" onClick={handleDebugPass}>
+              Debug Pass Clip
+            </button>
+          ) : null}
         </div>
       </div>
 

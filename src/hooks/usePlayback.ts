@@ -35,6 +35,7 @@ export function usePlayback() {
         if (loop) {
           useTacticalStore.setState({
             currentFrameIndex: 0,
+            playbackProgress: 0,
             players: store.players.map((player) => {
               const nextState = store.frames[0]?.playerStates.find(
                 (framePlayer) => framePlayer.playerId === player.id
@@ -47,7 +48,7 @@ export function usePlayback() {
           });
           elapsedRef.current = 0;
         } else {
-          useTacticalStore.setState({ playbackState: 'stopped' });
+          useTacticalStore.setState({ playbackState: 'stopped', playbackProgress: 0 });
           return;
         }
       } else {
@@ -78,13 +79,14 @@ export function usePlayback() {
               ? nextFrame.ballState
               : currentFrame.ballState;
 
-        useTacticalStore.setState({ players: updatedPlayers, ball: nextBall });
+        useTacticalStore.setState({ players: updatedPlayers, ball: nextBall, playbackProgress: t });
 
         if (t >= 1) {
           // Move to next frame
           elapsedRef.current = 0;
           useTacticalStore.setState({
             currentFrameIndex: frameIdx + 1,
+            playbackProgress: 0,
             ball: nextFrame.ballState,
           });
         }

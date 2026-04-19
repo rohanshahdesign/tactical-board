@@ -15,6 +15,7 @@ import {
 
 const IDLE_MODEL_PATH = '/assets/models/players/model4.glb';
 const RUN_MODEL_PATH = '/assets/models/players/slow_run.glb';
+const PASS_MODEL_PATH = '/assets/models/players/soccer-pass-bld-test.glb';
 
 const S = SCENE_SCALE;
 const IDLE_PLAYER_VISUAL_SCALE = 7;
@@ -24,8 +25,13 @@ const IDLE_PLAYER_Y_OFFSET = 1;
 const BASE_HEIGHT = 1.8;
 // slow_run.glb is ~1.25 units from feet to head (Y-up)
 const RUN_MODEL_HEIGHT = 1.25;
+const PASS_MODEL_HEIGHT = RUN_MODEL_HEIGHT;
 // model4.glb is Z-up, ~1625 units tall along Z
 const IDLE_MODEL_Z_HEIGHT = 1625;
+const PASS_MODEL_VISUAL_SCALE = 0.52;
+const PASS_MODEL_Y_OFFSET = 2.87;
+
+const PASS_ACTIONS = new Set(['pass-inside', 'pass-outside']);
 
 interface Player3DProps {
   player: Player;
@@ -204,6 +210,102 @@ const RunModel: React.FC<{
   );
 };
 
+const ActionModel: React.FC<{
+  player: Player;
+  isSelected: boolean;
+  yaw: number;
+  yOffset: number;
+  modelPath: string;
+  modelHeight: number;
+  progress: number;
+}> = ({
+  player,
+  isSelected,
+  yaw,
+  yOffset,
+  modelPath,
+  modelHeight,
+  progress,
+}) => {
+  const { scene, animations } = useGLTF(modelPath);
+
+  const clonedScene = useMemo(() => {
+    const s = SkeletonUtils.clone(scene);
+    s.traverse((child: THREE.Object3D) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        mesh.castShadow = false;
+        mesh.receiveShadow = false;
+        mesh.frustumCulled = false;
+        if (Array.isArray(mesh.material)) {
+          mesh.material = mesh.material.map((m) => m.clone());
+        } else {
+          mesh.material = mesh.material.clone();
+        }
+      }
+    });
+
+    const box = new THREE.Box3().setFromObject(s);
+    const center = box.getCenter(new THREE.Vector3());
+    s.position.x -= center.x;
+    s.position.z -= center.z;
+    s.position.y -= box.min.y;
+
+    return s;
+  }, [scene]);
+
+  useEffect(() => {
+    clonedScene.traverse((child: THREE.Object3D) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        mats.forEach((mat) => {
+          if ((mat as THREE.MeshStandardMaterial).color) {
+            (mat as THREE.MeshStandardMaterial).emissive = isSelected
+              ? new THREE.Color('#2563eb')
+              : new THREE.Color('#000000');
+            (mat as THREE.MeshStandardMaterial).emissiveIntensity = isSelected ? 0.3 : 0;
+          }
+        });
+      }
+    });
+  }, [clonedScene, isSelected]);
+
+  const { actions } = useAnimations(animations, clonedScene);
+
+  useEffect(() => {
+    const actionName = Object.keys(actions)[0];
+    const clipAction = actionName ? actions[actionName] : undefined;
+    if (!clipAction) {
+      return;
+    }
+
+    const clipDuration = clipAction.getClip().duration || 1;
+    clipAction.enabled = true;
+    clipAction.setLoop(THREE.LoopOnce, 1);
+    clipAction.clampWhenFinished = true;
+    clipAction.reset();
+    clipAction.play();
+    clipAction.paused = true;
+    clipAction.time = THREE.MathUtils.clamp(progress, 0, 0.9999) * clipDuration;
+
+    return () => {
+      clipAction.stop();
+    };
+  }, [actions, progress]);
+
+  const actionScale = (BASE_HEIGHT / modelHeight) * player.height * S * PASS_MODEL_VISUAL_SCALE;
+
+  return (
+    <group rotation={[0, yaw, 0]} position={[0, yOffset, 0]}>
+      <primitive
+        object={clonedScene}
+        scale={[actionScale, actionScale, actionScale]}
+      />
+    </group>
+  );
+};
+
 /* ------------------------------------------------------------------ */
 /*  Player3D – wrapper with drag, labels, model switching             */
 /* ------------------------------------------------------------------ */
@@ -227,6 +329,9 @@ export const Player3D: React.FC<Player3DProps> = React.memo(({
   const frames = useTacticalStore((s) => s.frames);
   const currentFrameIndex = useTacticalStore((s) => s.currentFrameIndex);
   const playbackState = useTacticalStore((s) => s.playbackState);
+  const playbackProgress = useTacticalStore((s) => s.playbackProgress);
+  const animationEnabled = useTacticalStore((s) => s.animationEnabled);
+  const ball = useTacticalStore((s) => s.ball);
   const activeTool = useTacticalStore((s) => s.activeTool);
   const runModelScale = useTacticalStore((s) => s.runModelScale);
   const runModelYOffset = useTacticalStore((s) => s.runModelYOffset);
@@ -234,6 +339,14 @@ export const Player3D: React.FC<Player3DProps> = React.memo(({
   const cameraMode = useTacticalStore((s) => s.camera.mode);
   const previousPlaybackPositionRef = useRef<Position2D | null>(null);
   const lastRunYawRef = useRef(runModelYawOffset);
+  const currentFrame = frames[currentFrameIndex];
+  const frameState = currentFrame?.playerStates.find((ps) => ps.playerId === player.id);
+  const isPassAction = frameState ? PASS_ACTIONS.has(frameState.action) : false;
+  const playerHasBall = animationEnabled && currentFrame
+    ? currentFrame.ballState.mode === 'attached' && currentFrame.ballState.ownerId === player.id
+    : ball.mode === 'attached' && ball.ownerId === player.id;
+  const shouldShowPassModel = Boolean(animationEnabled && frameState && isPassAction && playerHasBall);
+  const actionProgress = playbackState === 'playing' ? playbackProgress : 0;
 
   const motion = useMemo(() => {
     if (playbackState !== 'playing') {
@@ -285,6 +398,27 @@ export const Player3D: React.FC<Player3DProps> = React.memo(({
     player.position,
     runModelYawOffset,
   ]);
+
+  const actionYaw = useMemo(() => {
+    if (motion.isRunning) {
+      return motion.yaw;
+    }
+
+    if (currentFrame) {
+      const nextFrame = frames[currentFrameIndex + 1];
+      const fromState = currentFrame.playerStates.find((ps) => ps.playerId === player.id);
+      const toState = nextFrame?.playerStates.find((ps) => ps.playerId === player.id);
+
+      if (fromState && toState) {
+        const movement = getMovementDelta(fromState.position, toState.position);
+        if (movement.distance > MOVEMENT_EPSILON) {
+          return getMovementYaw(fromState.position, toState.position, runModelYawOffset);
+        }
+      }
+    }
+
+    return lastRunYawRef.current;
+  }, [currentFrame, currentFrameIndex, frames, motion.isRunning, motion.yaw, player.id, runModelYawOffset]);
 
   useEffect(() => {
     if (playbackState !== 'playing') {
@@ -422,7 +556,17 @@ export const Player3D: React.FC<Player3DProps> = React.memo(({
       </mesh>
 
       {/* Player model: idle when still, running during playback */}
-      {motion.isRunning ? (
+      {shouldShowPassModel ? (
+        <ActionModel
+          player={player}
+          isSelected={isSelected}
+          yaw={actionYaw}
+          yOffset={runModelYOffset + PASS_MODEL_Y_OFFSET}
+          modelPath={PASS_MODEL_PATH}
+          modelHeight={PASS_MODEL_HEIGHT}
+          progress={actionProgress}
+        />
+      ) : motion.isRunning ? (
         <RunModel
           player={player}
           isSelected={isSelected}
@@ -441,3 +585,4 @@ Player3D.displayName = 'Player3D';
 
 useGLTF.preload(IDLE_MODEL_PATH);
 useGLTF.preload(RUN_MODEL_PATH);
+useGLTF.preload(PASS_MODEL_PATH);

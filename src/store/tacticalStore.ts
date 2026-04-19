@@ -43,6 +43,7 @@ export interface TacticalStore {
   frames: Frame[];
   currentFrameIndex: number;
   playbackState: PlaybackState;
+  playbackProgress: number;
   playbackSpeed: number;
   loop: boolean;
   runModelScale: number;
@@ -187,6 +188,7 @@ export const useTacticalStore = create<TacticalStore>()(
       frames: [],
       currentFrameIndex: 0,
       playbackState: 'stopped',
+      playbackProgress: 0,
       playbackSpeed: 1,
       loop: false,
       runModelScale: 3,
@@ -212,6 +214,7 @@ export const useTacticalStore = create<TacticalStore>()(
         set((state) => ({
           animationEnabled: !state.animationEnabled,
           playbackState: !state.animationEnabled ? state.playbackState : 'stopped',
+          playbackProgress: !state.animationEnabled ? state.playbackProgress : 0,
         })),
       setTheme: (theme) => set({ theme }),
       toggleTheme: () =>
@@ -509,6 +512,7 @@ export const useTacticalStore = create<TacticalStore>()(
         set({
           frames: [...frames, newFrame],
           currentFrameIndex: frames.length,
+          playbackProgress: 0,
         });
       },
 
@@ -524,13 +528,13 @@ export const useTacticalStore = create<TacticalStore>()(
         };
         const updated = [...frames];
         updated.splice(index + 1, 0, duplicate);
-        set({ frames: updated, currentFrameIndex: index + 1 });
+        set({ frames: updated, currentFrameIndex: index + 1, playbackProgress: 0 });
       },
 
       deleteFrame: (index) => {
         const { frames, currentFrameIndex } = get();
         if (frames.length <= 1) {
-          set({ frames: [], currentFrameIndex: 0 });
+          set({ frames: [], currentFrameIndex: 0, playbackProgress: 0 });
           return;
         }
         const updated = frames.filter((_, i) => i !== index);
@@ -540,6 +544,7 @@ export const useTacticalStore = create<TacticalStore>()(
             currentFrameIndex,
             updated.length - 1
           ),
+          playbackProgress: 0,
         });
       },
 
@@ -562,6 +567,7 @@ export const useTacticalStore = create<TacticalStore>()(
         });
         set({
           currentFrameIndex: index,
+          playbackProgress: 0,
           players: updatedPlayers,
           ball: { ...frame.ballState },
         });
@@ -584,7 +590,7 @@ export const useTacticalStore = create<TacticalStore>()(
       // --- Playback ---
       play: () => set({ playbackState: 'playing' }),
       pause: () => set({ playbackState: 'paused' }),
-      stop: () => set({ playbackState: 'stopped', currentFrameIndex: 0 }),
+      stop: () => set({ playbackState: 'stopped', currentFrameIndex: 0, playbackProgress: 0 }),
       setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
       toggleLoop: () => set((state) => ({ loop: !state.loop })),
       setRunModelScale: (scale) => set({ runModelScale: scale }),
@@ -646,6 +652,7 @@ export const useTacticalStore = create<TacticalStore>()(
           frames,
           currentFrameIndex: 0,
           playbackState: 'playing',
+          playbackProgress: 0,
           selection: { type: null, id: null },
         });
       },
@@ -745,6 +752,7 @@ export const useTacticalStore = create<TacticalStore>()(
           frames: [],
           currentFrameIndex: 0,
           playbackState: 'stopped',
+          playbackProgress: 0,
           selection: { type: null, id: null },
           activeTool: 'select',
           playerPlacement: {
