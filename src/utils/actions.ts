@@ -1,4 +1,4 @@
-import { PlayerAction } from '../types';
+import { MovementType, PlayerAction } from '../types';
 
 // Map action names to display labels
 export const ACTION_LABELS: Record<PlayerAction, string> = {
@@ -59,9 +59,78 @@ export const MISC_ACTIONS: PlayerAction[] = [
   'throw-in', 'call-for-pass', 'jump',
 ];
 
-// Map action to GLB animation clip name
+export const PLAYER_ANIMATION_NAMES = {
+  idle: 'Breathing_idle',
+  walk: 'Walking',
+  jog: 'Jogging_forward',
+  sprint: 'Sprint',
+  turn: 'Turning',
+  header: 'Soccer_header',
+  pass: 'Soccer_pass',
+  tackle: 'Tackle',
+} as const;
+
+const ACTION_TO_CLIP_NAME: Record<PlayerAction, string> = {
+  shoot: PLAYER_ANIMATION_NAMES.idle,
+  volley: PLAYER_ANIMATION_NAMES.idle,
+  header: PLAYER_ANIMATION_NAMES.header,
+  'pass-inside': PLAYER_ANIMATION_NAMES.pass,
+  'pass-outside': PLAYER_ANIMATION_NAMES.pass,
+  'tackle-standing': PLAYER_ANIMATION_NAMES.tackle,
+  'slide-tackle': PLAYER_ANIMATION_NAMES.idle,
+  press: PLAYER_ANIMATION_NAMES.idle,
+  intercept: PLAYER_ANIMATION_NAMES.idle,
+  'block-shot': PLAYER_ANIMATION_NAMES.idle,
+  sprint: PLAYER_ANIMATION_NAMES.sprint,
+  idle: PLAYER_ANIMATION_NAMES.idle,
+  jog: PLAYER_ANIMATION_NAMES.jog,
+  walk: PLAYER_ANIMATION_NAMES.walk,
+  jockey: PLAYER_ANIMATION_NAMES.turn,
+  'change-direction': PLAYER_ANIMATION_NAMES.turn,
+  'gk-idle': PLAYER_ANIMATION_NAMES.idle,
+  'gk-dive-left': PLAYER_ANIMATION_NAMES.idle,
+  'gk-dive-right': PLAYER_ANIMATION_NAMES.idle,
+  'gk-dive-top-left': PLAYER_ANIMATION_NAMES.idle,
+  'gk-dive-top-right': PLAYER_ANIMATION_NAMES.idle,
+  'gk-dive-bottom-left': PLAYER_ANIMATION_NAMES.idle,
+  'gk-dive-bottom-right': PLAYER_ANIMATION_NAMES.idle,
+  'gk-jump-parry': PLAYER_ANIMATION_NAMES.idle,
+  'gk-collect': PLAYER_ANIMATION_NAMES.idle,
+  'gk-kick': PLAYER_ANIMATION_NAMES.idle,
+  'gk-volley-kick': PLAYER_ANIMATION_NAMES.idle,
+  'gk-pass': PLAYER_ANIMATION_NAMES.idle,
+  'throw-in': PLAYER_ANIMATION_NAMES.idle,
+  'call-for-pass': PLAYER_ANIMATION_NAMES.idle,
+  jump: PLAYER_ANIMATION_NAMES.idle,
+  none: PLAYER_ANIMATION_NAMES.idle,
+};
+
+const PROGRESS_DRIVEN_ANIMATIONS = new Set<string>([
+  PLAYER_ANIMATION_NAMES.header,
+  PLAYER_ANIMATION_NAMES.pass,
+  PLAYER_ANIMATION_NAMES.tackle,
+]);
+
+// Map action to semantic GLB animation clip name.
 export function getAnimationClipName(action: PlayerAction): string {
-  return action;
+  return ACTION_TO_CLIP_NAME[action] ?? PLAYER_ANIMATION_NAMES.idle;
+}
+
+export function getMovementClipName(movementType: MovementType): string {
+  switch (movementType) {
+    case 'walk':
+      return PLAYER_ANIMATION_NAMES.walk;
+    case 'jog':
+      return PLAYER_ANIMATION_NAMES.jog;
+    case 'run':
+      return PLAYER_ANIMATION_NAMES.sprint;
+    default:
+      return PLAYER_ANIMATION_NAMES.idle;
+  }
+}
+
+export function isProgressDrivenAnimation(clipName: string): boolean {
+  return PROGRESS_DRIVEN_ANIMATIONS.has(clipName);
 }
 
 // Movement type to speed multiplier (meters per second)

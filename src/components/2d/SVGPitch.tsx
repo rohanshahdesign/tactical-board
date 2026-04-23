@@ -43,6 +43,7 @@ export const SVGPitch: React.FC = () => {
   const objects = useTacticalStore((s) => s.objects);
   const annotations = useTacticalStore((s) => s.annotations);
   const ball = useTacticalStore((s) => s.ball);
+  const sceneVisibility = useTacticalStore((s) => s.sceneVisibility);
   const activeTool = useTacticalStore((s) => s.activeTool);
   const playerPlacement = useTacticalStore((s) => s.playerPlacement);
   const objectPlacementType = useTacticalStore((s) => s.objectPlacementType);
@@ -196,14 +197,16 @@ export const SVGPitch: React.FC = () => {
       >
         {/* Football field SVG background */}
         <rect className="pitch-bg" x={0} y={0} width={SVG_WIDTH} height={SVG_HEIGHT} fill="transparent" />
-        <image
-          href={FIELD_SVG_PATH}
-          x={0}
-          y={0}
-          width={SVG_WIDTH}
-          height={SVG_HEIGHT}
-          style={{ pointerEvents: 'none' }}
-        />
+        {sceneVisibility.field ? (
+          <image
+            href={FIELD_SVG_PATH}
+            x={0}
+            y={0}
+            width={SVG_WIDTH}
+            height={SVG_HEIGHT}
+            style={{ pointerEvents: 'none' }}
+          />
+        ) : null}
 
         {DEBUG_2D_BORDER_VISIBLE && (
           <g style={{ pointerEvents: 'none' }}>
@@ -226,7 +229,7 @@ export const SVGPitch: React.FC = () => {
         )}
 
         {/* Objects */}
-        {objects.map((obj) => {
+        {sceneVisibility.objects && objects.map((obj) => {
           const pos = toSvg(obj.position);
           return (
             <g
@@ -247,7 +250,7 @@ export const SVGPitch: React.FC = () => {
         })}
 
         {/* Players */}
-        {players.map((player) => {
+        {sceneVisibility.players && players.map((player) => {
           const pos = toSvg(player.position);
           const isSelected = selection.id === player.id;
           return (
@@ -301,17 +304,19 @@ export const SVGPitch: React.FC = () => {
         })}
 
         {/* Ball */}
-        <circle
-          cx={ballSvg.x}
-          cy={ballSvg.y}
-          r={6}
-          fill="#ffffff"
-          stroke={ballStroke}
-          strokeWidth={1}
-        />
+        {sceneVisibility.ball ? (
+          <circle
+            cx={ballSvg.x}
+            cy={ballSvg.y}
+            r={6}
+            fill="#ffffff"
+            stroke={ballStroke}
+            strokeWidth={1}
+          />
+        ) : null}
 
         {/* Annotations */}
-        {annotations.map((anno) => {
+        {sceneVisibility.annotations && annotations.map((anno) => {
           const pos = toSvg(anno.position);
           return (
             <g key={anno.id}>

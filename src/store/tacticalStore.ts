@@ -21,9 +21,13 @@ import {
   PlayerModel,
   PitchObjectType,
   PITCH,
+  SceneVisibility,
 } from '../types';
 import { DEFAULT_FORMATIONS } from '../data/formations';
 import { getAttachedBallPosition } from '../utils/ball';
+
+type SceneLayerId = keyof SceneVisibility;
+const DEBUG_PLAYER_SPAWN = import.meta.env.DEV;
 
 export interface TacticalStore {
   // --- Mode ---
@@ -32,6 +36,7 @@ export interface TacticalStore {
   theme: 'dark' | 'light';
   leftPanelCollapsed: boolean;
   rightPanelCollapsed: boolean;
+  sceneVisibility: SceneVisibility;
 
   // --- Entities ---
   players: Player[];
@@ -77,6 +82,8 @@ export interface TacticalStore {
   toggleTheme: () => void;
   toggleLeftPanel: () => void;
   toggleRightPanel: () => void;
+  setSceneLayerVisibility: (layer: SceneLayerId, visible: boolean) => void;
+  toggleSceneLayerVisibility: (layer: SceneLayerId) => void;
 
   // --- Player Actions ---
   addPlayer: (config: {
@@ -181,6 +188,13 @@ export const useTacticalStore = create<TacticalStore>()(
       theme: 'dark',
       leftPanelCollapsed: false,
       rightPanelCollapsed: false,
+      sceneVisibility: {
+        field: true,
+        players: true,
+        objects: true,
+        ball: true,
+        annotations: true,
+      },
       players: [],
       objects: [],
       annotations: [],
@@ -191,8 +205,8 @@ export const useTacticalStore = create<TacticalStore>()(
       playbackProgress: 0,
       playbackSpeed: 1,
       loop: false,
-      runModelScale: 3,
-      runModelYOffset: -1.9,
+      runModelScale: 5,
+      runModelYOffset: 0,
       runModelYawOffset: 0,
       camera: { ...initialCamera },
       selection: { type: null, id: null },
@@ -223,6 +237,20 @@ export const useTacticalStore = create<TacticalStore>()(
         set((state) => ({ leftPanelCollapsed: !state.leftPanelCollapsed })),
       toggleRightPanel: () =>
         set((state) => ({ rightPanelCollapsed: !state.rightPanelCollapsed })),
+      setSceneLayerVisibility: (layer, visible) =>
+        set((state) => ({
+          sceneVisibility: {
+            ...state.sceneVisibility,
+            [layer]: visible,
+          },
+        })),
+      toggleSceneLayerVisibility: (layer) =>
+        set((state) => ({
+          sceneVisibility: {
+            ...state.sceneVisibility,
+            [layer]: !state.sceneVisibility[layer],
+          },
+        })),
 
       // --- Players ---
       addPlayer: (config) => {
@@ -252,6 +280,24 @@ export const useTacticalStore = create<TacticalStore>()(
                   : [...frame.playerStates, createPlayerFrameState(player)],
               }))
             : frames;
+
+        if (DEBUG_PLAYER_SPAWN) {
+          console.info('[Tactical] addPlayer', {
+            requestedPosition: config.position,
+            resolvedPosition: player.position,
+            mode,
+            player: {
+              id: player.id,
+              name: player.name,
+              team: player.team,
+              role: player.role,
+              model: player.model,
+              height: player.height,
+            },
+            nextPlayerCount: players.length + 1,
+            animationEnabled,
+          });
+        }
 
         set({ players: [...players, player], frames: updatedFrames });
       },

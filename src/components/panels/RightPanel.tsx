@@ -12,7 +12,7 @@ type ActionOption = {
   tone: 'attack' | 'defend' | 'move' | 'support';
 };
 
-type RightPanelTab = 'properties' | 'formations' | 'objects';
+type RightPanelTab = 'properties' | 'formations' | 'objects' | 'layers';
 
 type PlacementAsset =
   | { kind: 'object'; type: PitchObjectType; label: string; copy: string }
@@ -38,6 +38,14 @@ const OBJECT_LIBRARY: Record<'2D' | '3D', PlacementAsset[]> = {
     { kind: 'object', type: 'training-ladder', label: '3D Ladder', copy: 'Ground agility ladder' },
   ],
 };
+
+const SCENE_LAYER_OPTIONS = [
+  { id: 'field', label: 'Field', copy: 'Hide or reveal the pitch surface and stadium model.' },
+  { id: 'players', label: 'Players', copy: 'Show or hide all player markers/models.' },
+  { id: 'objects', label: 'Objects', copy: 'Show or hide cones, ladders, blockers and other props.' },
+  { id: 'ball', label: 'Ball', copy: 'Show or hide the active match ball.' },
+  { id: 'annotations', label: 'Annotations', copy: 'Show or hide note labels on the board.' },
+] as const;
 
 const OUTFIELD_WITH_BALL: ActionOption[] = [
   { action: 'pass-inside', tone: 'attack' },
@@ -115,6 +123,8 @@ const TwoDInspector: React.FC<{ onCollapse: () => void }> = ({ onCollapse }) => 
 
       {activeTab === 'formations' ? (
         <FormationsPanel />
+      ) : activeTab === 'layers' ? (
+        <LayersPanel />
       ) : activeTab === 'objects' ? (
         <ObjectsPanel mode="2D" />
       ) : selectedPlayer ? (
@@ -150,6 +160,8 @@ const ThreeDInspector: React.FC<{ onCollapse: () => void }> = ({ onCollapse }) =
 
       {activeTab === 'formations' ? (
         <FormationsPanel />
+      ) : activeTab === 'layers' ? (
+        <LayersPanel />
       ) : activeTab === 'objects' ? (
         <ObjectsPanel mode="3D" />
       ) : (
@@ -578,6 +590,55 @@ const ObjectsPanel: React.FC<{ mode: '2D' | '3D' }> = ({ mode }) => {
   );
 };
 
+const LayersPanel: React.FC = () => {
+  const sceneVisibility = useTacticalStore((s) => s.sceneVisibility);
+  const setSceneLayerVisibility = useTacticalStore((s) => s.setSceneLayerVisibility);
+  const players = useTacticalStore((s) => s.players);
+  const objects = useTacticalStore((s) => s.objects);
+  const annotations = useTacticalStore((s) => s.annotations);
+
+  const counts = {
+    field: 1,
+    players: players.length,
+    objects: objects.length,
+    ball: 1,
+    annotations: annotations.length,
+  } as const;
+
+  return (
+    <>
+      <div className="rp-info-card emphasis">
+        <span className="rp-section-label">LAYERS</span>
+        <p className="rp-helper-copy">
+          Toggle field elements on and off to inspect placements, clear the view, or verify whether a model is spawning below the surface.
+        </p>
+      </div>
+
+      <div className="rp-layer-list">
+        {SCENE_LAYER_OPTIONS.map((layer) => (
+          <div key={layer.id} className="rp-layer-row">
+            <div className="rp-layer-copy">
+              <div className="rp-layer-heading">
+                <span className="rp-label strong">{layer.label}</span>
+                <span className="rp-layer-count">{counts[layer.id]}</span>
+              </div>
+              <span className="rp-layer-subcopy">{layer.copy}</span>
+            </div>
+            <label className="rp-switch">
+              <input
+                type="checkbox"
+                checked={sceneVisibility[layer.id]}
+                onChange={(event) => setSceneLayerVisibility(layer.id, event.target.checked)}
+              />
+              <span className="rp-switch-slider" />
+            </label>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+};
+
 const ObjectInspectorPanel: React.FC = () => {
   const selection = useTacticalStore((s) => s.selection);
   const objects = useTacticalStore((s) => s.objects);
@@ -684,6 +745,9 @@ const PanelTabs: React.FC<{
         </button>
         <button className={`rp-tab ${activeTab === 'objects' ? 'active' : ''}`} onClick={() => setActiveTab('objects')}>
           Objects
+        </button>
+        <button className={`rp-tab ${activeTab === 'layers' ? 'active' : ''}`} onClick={() => setActiveTab('layers')}>
+          Layers
         </button>
       </div>
     </div>

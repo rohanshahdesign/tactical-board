@@ -1,7 +1,7 @@
 import { stat } from 'fs/promises';
 import { NodeIO } from '@gltf-transform/core';
 
-const filepath = './public/assets/models/players/model4.glb';
+const filepath = './public/assets/models/players/Player_1.glb';
 
 // File size
 const s = await stat(filepath);

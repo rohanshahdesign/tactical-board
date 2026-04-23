@@ -19,6 +19,8 @@ import {
 } from './pitch3dConstants';
 import './ThreeScene.css';
 
+const DEBUG_PLAYER_SPAWN = import.meta.env.DEV;
+
 export const ThreeScene: React.FC = () => {
   const camera = useTacticalStore((s) => s.camera);
   const theme = useTacticalStore((s) => s.theme);
@@ -206,6 +208,7 @@ const SceneContents: React.FC<SceneContentsProps> = ({ theme }) => {
   const players = useTacticalStore((s) => s.players);
   const objects = useTacticalStore((s) => s.objects);
   const annotations = useTacticalStore((s) => s.annotations);
+  const sceneVisibility = useTacticalStore((s) => s.sceneVisibility);
   const selection = useTacticalStore((s) => s.selection);
   const select = useTacticalStore((s) => s.select);
   const clearSelection = useTacticalStore((s) => s.clearSelection);
@@ -232,6 +235,15 @@ const SceneContents: React.FC<SceneContentsProps> = ({ theme }) => {
     };
 
     if (activeTool === 'place-player') {
+      if (DEBUG_PLAYER_SPAWN) {
+        console.info('[Tactical] 3D place-player click', {
+          worldPos,
+          playerPlacement,
+          cameraMode: cameraState.mode,
+          visibleLayers: sceneVisibility,
+        });
+      }
+
       addPlayer({
         ...playerPlacement,
         position: worldPos,
@@ -329,7 +341,7 @@ const SceneContents: React.FC<SceneContentsProps> = ({ theme }) => {
       <Pitch3D onPitchPointerDown={handlePitchPointerDown} />
 
       {/* Players */}
-      {players.map((player) => (
+      {sceneVisibility.players && players.map((player) => (
         <Player3D
           key={player.id}
           player={player}
@@ -340,10 +352,10 @@ const SceneContents: React.FC<SceneContentsProps> = ({ theme }) => {
       ))}
 
       {/* Ball */}
-      <Ball3D />
+      {sceneVisibility.ball ? <Ball3D /> : null}
 
       {/* Objects */}
-      {objects.map((obj) => (
+      {sceneVisibility.objects && objects.map((obj) => (
         <Object3D
           key={obj.id}
           object={obj}
@@ -353,7 +365,7 @@ const SceneContents: React.FC<SceneContentsProps> = ({ theme }) => {
       ))}
 
       {/* Annotations */}
-      {annotations.map((anno) => (
+      {sceneVisibility.annotations && annotations.map((anno) => (
         <Annotation3D key={anno.id} annotation={anno} />
       ))}
 

@@ -2,6 +2,7 @@ import React, { Suspense, useMemo } from 'react';
 import { ThreeEvent } from '@react-three/fiber';
 import { Line, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
+import { useTacticalStore } from '../../store/tacticalStore';
 import { PITCH } from '../../types';
 import {
   DEBUG_3D_BORDER_VISIBLE,
@@ -117,15 +118,19 @@ interface Pitch3DProps {
 }
 
 export const Pitch3D: React.FC<Pitch3DProps> = ({ onPitchPointerDown }) => {
+  const showField = useTacticalStore((s) => s.sceneVisibility.field);
+
   return (
     <group>
       <InteractionPlane onPitchPointerDown={onPitchPointerDown} />
       {DEBUG_3D_BORDER_VISIBLE ? <BoundaryDebug /> : null}
 
       {/* Stadium GLB */}
-      <Suspense fallback={null}>
-        <StadiumModel />
-      </Suspense>
+      {showField ? (
+        <Suspense fallback={null}>
+          <StadiumModel />
+        </Suspense>
+      ) : null}
     </group>
   );
 };

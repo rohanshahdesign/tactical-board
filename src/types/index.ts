@@ -172,6 +172,16 @@ export interface Selection {
   id: string | null;
 }
 
+// --- Scene Visibility ---
+
+export interface SceneVisibility {
+  field: boolean;
+  players: boolean;
+  objects: boolean;
+  ball: boolean;
+  annotations: boolean;
+}
+
 // --- Playback ---
 
 export type PlaybackState = 'stopped' | 'playing' | 'paused';

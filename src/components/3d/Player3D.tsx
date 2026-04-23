@@ -1,10 +1,16 @@
 import React, { useRef, useState, useCallback, useMemo, useEffect } from 'react';
-import { useThree, ThreeEvent } from '@react-three/fiber';
+import { useThree, ThreeEvent, useFrame } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { Player, Position2D, PITCH } from '../../types';
+import { Player, Position2D } from '../../types';
 import { useTacticalStore } from '../../store/tacticalStore';
+import {
+  getAnimationClipName,
+  getMovementClipName,
+  isProgressDrivenAnimation,
+  PLAYER_ANIMATION_NAMES,
+} from '../../utils/actions';
 import {
   fromStadiumSpace,
   SCENE_SCALE,
@@ -13,23 +19,59 @@ import {
   toStadiumSpace,
 } from './pitch3dConstants';
 
-const IDLE_MODEL_PATH = '/assets/models/players/model4.glb';
-const RUN_MODEL_PATH = '/assets/models/players/slow_run.glb';
-const PASS_MODEL_PATH = '/assets/models/players/soccer-pass-bld-test.glb';
+const PLAYER_MODEL_PATH = '/assets/models/players/Player_1.glb';
 
 const S = SCENE_SCALE;
-const IDLE_PLAYER_VISUAL_SCALE = 7;
-const IDLE_PLAYER_Y_OFFSET = 1;
 
 // Target height in world units at player.height = 1.0
 const BASE_HEIGHT = 1.8;
-// slow_run.glb is ~1.25 units from feet to head (Y-up)
-const RUN_MODEL_HEIGHT = 1.25;
-const PASS_MODEL_HEIGHT = RUN_MODEL_HEIGHT;
-// model4.glb is Z-up, ~1625 units tall along Z
-const IDLE_MODEL_Z_HEIGHT = 1625;
-const PASS_MODEL_VISUAL_SCALE = 0.52;
-const PASS_MODEL_Y_OFFSET = 2.87;
+const PLAYER_MODEL_HEIGHT = BASE_HEIGHT;
+const PLAYER_ANIMATION_FADE_SECONDS = 0.25;
+const PLAYER_BASE_Y_OFFSET = 0.26;
+const PLAYER_MOVEMENT_YAW_CORRECTION = -Math.PI / 2;
+const DEBUG_PLAYER_SPAWN = import.meta.env.DEV;
+const reportedMissingMeshPlayers = new Set<string>();
+const MOVEMENT_LOOP_CLIP_NAMES = new Set<string>([
+  PLAYER_ANIMATION_NAMES.walk,
+  PLAYER_ANIMATION_NAMES.jog,
+  PLAYER_ANIMATION_NAMES.sprint,
+]);
+const ROOT_MOTION_BONE_CANDIDATES = ['mixamorig:Hips', 'Hips'];
+
+const PLAYER_CLIP_ALIASES: Record<string, string[]> = {
+  [PLAYER_ANIMATION_NAMES.idle]: [
+    PLAYER_ANIMATION_NAMES.idle,
+    'Armature|mixamo.com|Layer0',
+  ],
+  [PLAYER_ANIMATION_NAMES.walk]: [
+    PLAYER_ANIMATION_NAMES.walk,
+    'Armature|mixamo.com|Layer0.005',
+  ],
+  [PLAYER_ANIMATION_NAMES.jog]: [
+    PLAYER_ANIMATION_NAMES.jog,
+    'Armature|mixamo.com|Layer0.003',
+  ],
+  [PLAYER_ANIMATION_NAMES.sprint]: [
+    PLAYER_ANIMATION_NAMES.sprint,
+    'Armature.001|mixamo.com|Layer0',
+  ],
+  [PLAYER_ANIMATION_NAMES.turn]: [
+    PLAYER_ANIMATION_NAMES.turn,
+    'Armature.002|mixamo.com|Layer0',
+  ],
+  [PLAYER_ANIMATION_NAMES.header]: [
+    PLAYER_ANIMATION_NAMES.header,
+    'Armature|mixamo.com|Layer0.001',
+  ],
+  [PLAYER_ANIMATION_NAMES.pass]: [
+    PLAYER_ANIMATION_NAMES.pass,
+    'Armature|mixamo.com|Layer0.004',
+  ],
+  [PLAYER_ANIMATION_NAMES.tackle]: [
+    PLAYER_ANIMATION_NAMES.tackle,
+    'Armature|mixamo.com|Layer0.002',
+  ],
+};
 
 const PASS_ACTIONS = new Set(['pass-inside', 'pass-outside']);
 
@@ -57,13 +99,47 @@ function getMovementYaw(from: Position2D, to: Position2D, yawOffset: number) {
   const fromStadiumPosition = toStadiumSpace(from);
   const toStadiumPosition = toStadiumSpace(to);
   const { dx, dz } = getMovementDelta(fromStadiumPosition, toStadiumPosition);
-  return Math.atan2(dx, dz) + yawOffset;
+  return Math.atan2(dx, dz) + yawOffset + PLAYER_MOVEMENT_YAW_CORRECTION;
+}
+
+function getFrameSegmentYaw(
+  frames: ReturnType<typeof useTacticalStore.getState>['frames'],
+  frameIndex: number,
+  playerId: string,
+  yawOffset: number
+) {
+  const currentFrame = frames[frameIndex];
+  if (!currentFrame) {
+    return null;
+  }
+
+  const currentState = currentFrame.playerStates.find((ps) => ps.playerId === playerId);
+  if (!currentState) {
+    return null;
+  }
+
+  const nextState = frames[frameIndex + 1]?.playerStates.find((ps) => ps.playerId === playerId);
+  if (nextState) {
+    const nextMovement = getMovementDelta(currentState.position, nextState.position);
+    if (nextMovement.distance > MOVEMENT_EPSILON) {
+      return getMovementYaw(currentState.position, nextState.position, yawOffset);
+    }
+  }
+
+  const previousState = frames[frameIndex - 1]?.playerStates.find((ps) => ps.playerId === playerId);
+  if (previousState) {
+    const previousMovement = getMovementDelta(previousState.position, currentState.position);
+    if (previousMovement.distance > MOVEMENT_EPSILON) {
+      return getMovementYaw(previousState.position, currentState.position, yawOffset);
+    }
+  }
+
+  return null;
 }
 
 const createKitMaterial = (
   sourceMaterial: THREE.Material | THREE.Material[] | undefined,
-  kitColor: string,
-  isSelected: boolean
+  kitColor: string
 ) => {
   const source = Array.isArray(sourceMaterial) ? sourceMaterial[0] : sourceMaterial;
   const meshMaterial = source as THREE.MeshStandardMaterial | undefined;
@@ -86,31 +162,99 @@ const createKitMaterial = (
     side: source?.side ?? THREE.FrontSide,
     roughness: meshMaterial?.roughness ?? 0.7,
     metalness: meshMaterial?.metalness ?? 0.05,
-    emissive: isSelected ? new THREE.Color('#2563eb') : new THREE.Color('#000000'),
-    emissiveIntensity: isSelected ? 0.3 : 0,
+    emissive: new THREE.Color('#000000'),
+    emissiveIntensity: 0,
   });
 };
 
+const setSelectionHighlight = (root: THREE.Object3D, isSelected: boolean) => {
+  root.traverse((child: THREE.Object3D) => {
+    if (!(child as THREE.Mesh).isMesh) {
+      return;
+    }
+
+    const mesh = child as THREE.Mesh;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+
+    materials.forEach((material) => {
+      if (!(material instanceof THREE.MeshStandardMaterial)) {
+        return;
+      }
+
+      material.emissive.set(isSelected ? '#2563eb' : '#000000');
+      material.emissiveIntensity = isSelected ? 0.3 : 0;
+    });
+  });
+};
+
+const findRootMotionBone = (root: THREE.Object3D) => {
+  for (const candidate of ROOT_MOTION_BONE_CANDIDATES) {
+    const directMatch = root.getObjectByName(candidate);
+    if (directMatch instanceof THREE.Bone) {
+      return directMatch;
+    }
+  }
+
+  let fallbackBone: THREE.Bone | null = null;
+  root.traverse((child: THREE.Object3D) => {
+    if (fallbackBone || !(child instanceof THREE.Bone)) {
+      return;
+    }
+
+    if (child.name.endsWith('Hips') || child.name === 'Hips') {
+      fallbackBone = child;
+    }
+  });
+
+  return fallbackBone;
+};
+
+function resolvePlayerClipName(requestedClipName: string, availableClipNames: string[]) {
+  const candidates = PLAYER_CLIP_ALIASES[requestedClipName] ?? [requestedClipName];
+
+  for (const candidate of candidates) {
+    if (availableClipNames.includes(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 /* ------------------------------------------------------------------ */
-/*  Idle (still) model – static mesh, Z-up, needs rotation            */
+/*  Unified player model – skinned mesh with in-place animations       */
 /* ------------------------------------------------------------------ */
-const IdleModel: React.FC<{ player: Player; isSelected: boolean }> = ({ player, isSelected }) => {
-  const { scene } = useGLTF(IDLE_MODEL_PATH);
+const UnifiedPlayerModel: React.FC<{
+  player: Player;
+  isSelected: boolean;
+  yaw: number;
+  yOffset: number;
+  scaleMultiplier: number;
+  clipName: string;
+  progress: number;
+}> = ({
+  player,
+  isSelected,
+  yaw,
+  yOffset,
+  scaleMultiplier,
+  clipName,
+  progress,
+}) => {
+  const { scene, animations } = useGLTF(PLAYER_MODEL_PATH);
 
   const clonedScene = useMemo(() => {
-    const s = scene.clone(true);
+    const s = SkeletonUtils.clone(scene);
     s.traverse((child: THREE.Object3D) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
         mesh.castShadow = false;
         mesh.receiveShadow = false;
         mesh.frustumCulled = false;
-        mesh.material = createKitMaterial(mesh.material, player.kitColor, isSelected);
+        mesh.material = createKitMaterial(mesh.material, player.kitColor);
       }
     });
 
-    // model4.glb appears to import in an already-upright pose here,
-    // so only apply a facing rotation instead of tipping it onto the turf.
     s.rotation.set(0, Math.PI / 2, 0);
     s.updateMatrixWorld(true);
 
@@ -122,185 +266,173 @@ const IdleModel: React.FC<{ player: Player; isSelected: boolean }> = ({ player, 
     s.updateMatrixWorld(true);
 
     return s;
-  }, [scene, player.kitColor, isSelected]);
-
-  const idleScale = (BASE_HEIGHT / IDLE_MODEL_Z_HEIGHT) * player.height * S * IDLE_PLAYER_VISUAL_SCALE;
-
-  return (
-    <primitive
-      object={clonedScene}
-      position={[0, IDLE_PLAYER_Y_OFFSET, 0]}
-      scale={[idleScale, idleScale, idleScale]}
-    />
-  );
-};
-
-/* ------------------------------------------------------------------ */
-/*  Run model – skinned mesh with Mixamo animation                    */
-/* ------------------------------------------------------------------ */
-const RunModel: React.FC<{
-  player: Player;
-  isSelected: boolean;
-  yaw: number;
-  scaleMultiplier: number;
-  yOffset: number;
-}> = ({ player, isSelected, yaw, scaleMultiplier, yOffset }) => {
-  const { scene, animations } = useGLTF(RUN_MODEL_PATH);
-
-  const clonedScene = useMemo(() => {
-    const s = SkeletonUtils.clone(scene);
-    s.traverse((child: THREE.Object3D) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        mesh.castShadow = false;
-        mesh.receiveShadow = false;
-        mesh.frustumCulled = false;
-        if (Array.isArray(mesh.material)) {
-          mesh.material = mesh.material.map((m) => m.clone());
-        } else {
-          mesh.material = mesh.material.clone();
-        }
-      }
-    });
-
-    const box = new THREE.Box3().setFromObject(s);
-    const center = box.getCenter(new THREE.Vector3());
-    s.position.x -= center.x;
-    s.position.z -= center.z;
-    s.position.y -= box.min.y;
-
-    return s;
-  }, [scene]);
+  }, [scene, player.kitColor]);
 
   useEffect(() => {
-    clonedScene.traverse((child: THREE.Object3D) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        mats.forEach((mat) => {
-          if ((mat as THREE.MeshStandardMaterial).color) {
-            (mat as THREE.MeshStandardMaterial).emissive = isSelected
-              ? new THREE.Color('#2563eb')
-              : new THREE.Color('#000000');
-            (mat as THREE.MeshStandardMaterial).emissiveIntensity = isSelected ? 0.3 : 0;
-          }
-        });
-      }
-    });
+    setSelectionHighlight(clonedScene, isSelected);
   }, [clonedScene, isSelected]);
 
   const { actions } = useAnimations(animations, clonedScene);
-  useEffect(() => {
-    const actionName = Object.keys(actions)[0];
-    if (actionName && actions[actionName]) {
-      actions[actionName]!.reset().fadeIn(0.2).play();
-      return () => { actions[actionName]?.fadeOut(0.2); };
+  const availableClipNames = useMemo(() => Object.keys(actions), [actions]);
+  const resolvedIdleClipName = useMemo(
+    () => resolvePlayerClipName(PLAYER_ANIMATION_NAMES.idle, availableClipNames),
+    [availableClipNames]
+  );
+  const resolvedClipName = useMemo(
+    () => resolvePlayerClipName(clipName, availableClipNames) ?? resolvedIdleClipName,
+    [availableClipNames, clipName, resolvedIdleClipName]
+  );
+  const previousClipNameRef = useRef<string | null>(null);
+  const isProgressDriven = isProgressDrivenAnimation(clipName);
+  const rootMotionBone = useMemo(() => findRootMotionBone(clonedScene), [clonedScene]);
+  const rootMotionBasePosition = useMemo(
+    () => rootMotionBone?.position.clone() ?? null,
+    [rootMotionBone]
+  );
+  const lockVerticalAxis = MOVEMENT_LOOP_CLIP_NAMES.has(clipName);
+
+  useFrame(() => {
+    if (!rootMotionBone || !rootMotionBasePosition) {
+      return;
     }
-  }, [actions]);
 
-  const runScale = (BASE_HEIGHT / RUN_MODEL_HEIGHT) * player.height * S * scaleMultiplier;
+    rootMotionBone.position.x = rootMotionBasePosition.x;
+    rootMotionBone.position.z = rootMotionBasePosition.z;
 
-  return (
-    <group rotation={[0, yaw, 0]} position={[0, yOffset, 0]}>
-      <primitive
-        object={clonedScene}
-        scale={[runScale, runScale, runScale]}
-      />
-    </group>
-  );
-};
-
-const ActionModel: React.FC<{
-  player: Player;
-  isSelected: boolean;
-  yaw: number;
-  yOffset: number;
-  modelPath: string;
-  modelHeight: number;
-  progress: number;
-}> = ({
-  player,
-  isSelected,
-  yaw,
-  yOffset,
-  modelPath,
-  modelHeight,
-  progress,
-}) => {
-  const { scene, animations } = useGLTF(modelPath);
-
-  const clonedScene = useMemo(() => {
-    const s = SkeletonUtils.clone(scene);
-    s.traverse((child: THREE.Object3D) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        mesh.castShadow = false;
-        mesh.receiveShadow = false;
-        mesh.frustumCulled = false;
-        if (Array.isArray(mesh.material)) {
-          mesh.material = mesh.material.map((m) => m.clone());
-        } else {
-          mesh.material = mesh.material.clone();
-        }
-      }
-    });
-
-    const box = new THREE.Box3().setFromObject(s);
-    const center = box.getCenter(new THREE.Vector3());
-    s.position.x -= center.x;
-    s.position.z -= center.z;
-    s.position.y -= box.min.y;
-
-    return s;
-  }, [scene]);
+    if (lockVerticalAxis) {
+      rootMotionBone.position.y = rootMotionBasePosition.y;
+    }
+  });
 
   useEffect(() => {
-    clonedScene.traverse((child: THREE.Object3D) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        mats.forEach((mat) => {
-          if ((mat as THREE.MeshStandardMaterial).color) {
-            (mat as THREE.MeshStandardMaterial).emissive = isSelected
-              ? new THREE.Color('#2563eb')
-              : new THREE.Color('#000000');
-            (mat as THREE.MeshStandardMaterial).emissiveIntensity = isSelected ? 0.3 : 0;
-          }
-        });
-      }
-    });
-  }, [clonedScene, isSelected]);
+    if (!resolvedClipName) {
+      return;
+    }
 
-  const { actions } = useAnimations(animations, clonedScene);
+    const nextAction = actions[resolvedClipName];
+    if (!nextAction) {
+      return;
+    }
+
+    const previousClipName = previousClipNameRef.current;
+    const previousAction = previousClipName ? actions[previousClipName] : undefined;
+
+    if (previousAction && previousAction !== nextAction) {
+      previousAction.fadeOut(PLAYER_ANIMATION_FADE_SECONDS);
+    }
+
+    nextAction.enabled = true;
+
+    if (isProgressDriven) {
+      nextAction.setLoop(THREE.LoopOnce, 1);
+      nextAction.clampWhenFinished = true;
+      nextAction.reset();
+      nextAction.play();
+      nextAction.paused = true;
+    } else if (previousAction !== nextAction || !nextAction.isRunning()) {
+      nextAction.setLoop(THREE.LoopRepeat, Infinity);
+      nextAction.clampWhenFinished = false;
+      nextAction.paused = false;
+      nextAction.reset();
+      nextAction.fadeIn(PLAYER_ANIMATION_FADE_SECONDS).play();
+    }
+
+    previousClipNameRef.current = resolvedClipName;
+  }, [actions, isProgressDriven, resolvedClipName]);
 
   useEffect(() => {
-    const actionName = Object.keys(actions)[0];
-    const clipAction = actionName ? actions[actionName] : undefined;
+    if (!isProgressDriven || !resolvedClipName) {
+      return;
+    }
+
+    const clipAction = actions[resolvedClipName];
     if (!clipAction) {
       return;
     }
 
     const clipDuration = clipAction.getClip().duration || 1;
-    clipAction.enabled = true;
-    clipAction.setLoop(THREE.LoopOnce, 1);
-    clipAction.clampWhenFinished = true;
-    clipAction.reset();
-    clipAction.play();
-    clipAction.paused = true;
     clipAction.time = THREE.MathUtils.clamp(progress, 0, 0.9999) * clipDuration;
+  }, [actions, isProgressDriven, progress, resolvedClipName]);
 
+  useEffect(() => {
     return () => {
-      clipAction.stop();
+      Object.values(actions).forEach((action) => {
+        action?.stop();
+      });
     };
-  }, [actions, progress]);
+  }, [actions]);
 
-  const actionScale = (BASE_HEIGHT / modelHeight) * player.height * S * PASS_MODEL_VISUAL_SCALE;
+  const playerScale = (BASE_HEIGHT / PLAYER_MODEL_HEIGHT) * player.height * S * scaleMultiplier;
+
+  useEffect(() => {
+    if (!DEBUG_PLAYER_SPAWN) {
+      return;
+    }
+
+    const localBox = new THREE.Box3().setFromObject(clonedScene);
+    const localSize = localBox.getSize(new THREE.Vector3());
+    const approxScaledSize = localSize.clone().multiplyScalar(playerScale);
+    let meshCount = 0;
+    let skinnedMeshCount = 0;
+    const nodeTypeCounts: Record<string, number> = {};
+    const nodeNames: string[] = [];
+
+    clonedScene.traverse((child: THREE.Object3D) => {
+      nodeTypeCounts[child.type] = (nodeTypeCounts[child.type] ?? 0) + 1;
+
+      if (nodeNames.length < 12 && child.name) {
+        nodeNames.push(child.name);
+      }
+
+      if ((child as THREE.Mesh).isMesh) {
+        meshCount += 1;
+      }
+
+      if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
+        skinnedMeshCount += 1;
+      }
+    });
+
+    console.info('[Tactical] Player.glb runtime mount', {
+      playerId: player.id,
+      playerName: player.name,
+      meshCount,
+      skinnedMeshCount,
+      localBounds: {
+        min: localBox.min.toArray(),
+        max: localBox.max.toArray(),
+        size: localSize.toArray(),
+      },
+      approxScaledSize: approxScaledSize.toArray(),
+      playerScale,
+      yOffset,
+      yaw,
+      requestedClipName: clipName,
+      resolvedClipName,
+      availableClipNames,
+      animationsCount: animations.length,
+    });
+
+    if (meshCount === 0 && !reportedMissingMeshPlayers.has(player.id)) {
+      reportedMissingMeshPlayers.add(player.id);
+      console.error('[Tactical] Player.glb has no renderable meshes', {
+        playerId: player.id,
+        playerName: player.name,
+        meshCount,
+        skinnedMeshCount,
+        nodeTypeCounts,
+        sampleNodeNames: nodeNames,
+        availableClipNames,
+        hint: 'The GLB appears to contain animation/skeleton nodes but no mesh primitives. Re-export from Blender with both the skinned mesh object and armature included.',
+      });
+    }
+  }, [animations.length, availableClipNames, clipName, clonedScene, player.id, player.name, playerScale, resolvedClipName, yOffset, yaw]);
 
   return (
     <group rotation={[0, yaw, 0]} position={[0, yOffset, 0]}>
       <primitive
         object={clonedScene}
-        scale={[actionScale, actionScale, actionScale]}
+        scale={[playerScale, playerScale, playerScale]}
       />
     </group>
   );
@@ -341,28 +473,26 @@ export const Player3D: React.FC<Player3DProps> = React.memo(({
   const lastRunYawRef = useRef(runModelYawOffset);
   const currentFrame = frames[currentFrameIndex];
   const frameState = currentFrame?.playerStates.find((ps) => ps.playerId === player.id);
-  const isPassAction = frameState ? PASS_ACTIONS.has(frameState.action) : false;
   const playerHasBall = animationEnabled && currentFrame
     ? currentFrame.ballState.mode === 'attached' && currentFrame.ballState.ownerId === player.id
     : ball.mode === 'attached' && ball.ownerId === player.id;
-  const shouldShowPassModel = Boolean(animationEnabled && frameState && isPassAction && playerHasBall);
   const actionProgress = playbackState === 'playing' ? playbackProgress : 0;
 
   const motion = useMemo(() => {
     if (playbackState !== 'playing') {
-      return { isRunning: false, yaw: lastRunYawRef.current };
+      return { isMoving: false, yaw: lastRunYawRef.current, movementType: null as null | 'walk' | 'jog' | 'run' };
     }
 
     const currentFrame = frames[currentFrameIndex];
     const nextFrame = frames[currentFrameIndex + 1];
     if (!currentFrame || !nextFrame) {
-      return { isRunning: false, yaw: lastRunYawRef.current };
+      return { isMoving: false, yaw: lastRunYawRef.current, movementType: null as null | 'walk' | 'jog' | 'run' };
     }
 
     const fromState = currentFrame.playerStates.find((ps) => ps.playerId === player.id);
     const toState = nextFrame.playerStates.find((ps) => ps.playerId === player.id);
     if (!fromState || !toState) {
-      return { isRunning: false, yaw: lastRunYawRef.current };
+      return { isMoving: false, yaw: lastRunYawRef.current, movementType: null as null | 'walk' | 'jog' | 'run' };
     }
 
     const previousPlaybackPosition = previousPlaybackPositionRef.current;
@@ -373,10 +503,9 @@ export const Player3D: React.FC<Player3DProps> = React.memo(({
     const hasMovement =
       (liveMovement?.distance ?? 0) > MOVEMENT_EPSILON ||
       segmentMovement.distance > MOVEMENT_EPSILON;
-    const shouldRun = hasMovement && toState.movementType === 'run';
 
-    if (!shouldRun) {
-      return { isRunning: false, yaw: lastRunYawRef.current };
+    if (!hasMovement) {
+      return { isMoving: false, yaw: lastRunYawRef.current, movementType: null as null | 'walk' | 'jog' | 'run' };
     }
 
     const yaw =
@@ -387,8 +516,9 @@ export const Player3D: React.FC<Player3DProps> = React.memo(({
     lastRunYawRef.current = yaw;
 
     return {
-      isRunning: true,
+      isMoving: true,
       yaw,
+      movementType: toState.movementType,
     };
   }, [
     playbackState,
@@ -399,26 +529,33 @@ export const Player3D: React.FC<Player3DProps> = React.memo(({
     runModelYawOffset,
   ]);
 
+  const actionClipName = frameState ? getAnimationClipName(frameState.action) : PLAYER_ANIMATION_NAMES.idle;
+  const shouldPlayActionClip = Boolean(
+    playbackState === 'playing' &&
+      frameState &&
+      isProgressDrivenAnimation(actionClipName) &&
+      (!PASS_ACTIONS.has(frameState.action) || playerHasBall)
+  );
+  const desiredClipName = shouldPlayActionClip
+    ? actionClipName
+    : motion.isMoving && motion.movementType
+      ? getMovementClipName(motion.movementType)
+      : PLAYER_ANIMATION_NAMES.idle;
+  const modelYOffset = PLAYER_BASE_Y_OFFSET + runModelYOffset;
+
   const actionYaw = useMemo(() => {
-    if (motion.isRunning) {
+    if (motion.isMoving) {
       return motion.yaw;
     }
 
-    if (currentFrame) {
-      const nextFrame = frames[currentFrameIndex + 1];
-      const fromState = currentFrame.playerStates.find((ps) => ps.playerId === player.id);
-      const toState = nextFrame?.playerStates.find((ps) => ps.playerId === player.id);
-
-      if (fromState && toState) {
-        const movement = getMovementDelta(fromState.position, toState.position);
-        if (movement.distance > MOVEMENT_EPSILON) {
-          return getMovementYaw(fromState.position, toState.position, runModelYawOffset);
-        }
-      }
+    const frameSegmentYaw = getFrameSegmentYaw(frames, currentFrameIndex, player.id, runModelYawOffset);
+    if (frameSegmentYaw !== null) {
+      lastRunYawRef.current = frameSegmentYaw;
+      return frameSegmentYaw;
     }
 
     return lastRunYawRef.current;
-  }, [currentFrame, currentFrameIndex, frames, motion.isRunning, motion.yaw, player.id, runModelYawOffset]);
+  }, [currentFrameIndex, frames, motion.isMoving, motion.yaw, player.id, runModelYawOffset]);
 
   useEffect(() => {
     if (playbackState !== 'playing') {
@@ -429,6 +566,27 @@ export const Player3D: React.FC<Player3DProps> = React.memo(({
 
     previousPlaybackPositionRef.current = { ...player.position };
   }, [playbackState, player.position, runModelYawOffset]);
+
+  useEffect(() => {
+    if (!DEBUG_PLAYER_SPAWN) {
+      return;
+    }
+
+    console.info('[Tactical] Player3D placed', {
+      playerId: player.id,
+      playerName: player.name,
+      playerPosition: player.position,
+      stadiumPosition,
+      scenePosition: [stadiumPosition.x * S, STADIUM_PITCH_Y, stadiumPosition.z * S],
+      modelYOffset,
+      desiredClipName,
+      playbackState,
+      animationEnabled,
+      hasBall: playerHasBall,
+      frameAction: frameState?.action ?? null,
+      frameMovementType: frameState?.movementType ?? null,
+    });
+  }, [animationEnabled, desiredClipName, frameState?.action, frameState?.movementType, modelYOffset, playbackState, player.id, player.name, player.position, playerHasBall, stadiumPosition]);
 
   const stopDragging = useCallback((pointerId?: number) => {
     if (pointerId !== undefined && activePointerIdRef.current !== pointerId) {
@@ -555,34 +713,19 @@ export const Player3D: React.FC<Player3DProps> = React.memo(({
         <meshBasicMaterial color="#000000" transparent opacity={0.3} />
       </mesh>
 
-      {/* Player model: idle when still, running during playback */}
-      {shouldShowPassModel ? (
-        <ActionModel
-          player={player}
-          isSelected={isSelected}
-          yaw={actionYaw}
-          yOffset={runModelYOffset + PASS_MODEL_Y_OFFSET}
-          modelPath={PASS_MODEL_PATH}
-          modelHeight={PASS_MODEL_HEIGHT}
-          progress={actionProgress}
-        />
-      ) : motion.isRunning ? (
-        <RunModel
-          player={player}
-          isSelected={isSelected}
-          yaw={motion.yaw}
-          scaleMultiplier={runModelScale}
-          yOffset={runModelYOffset}
-        />
-      ) : (
-        <IdleModel player={player} isSelected={isSelected} />
-      )}
+      <UnifiedPlayerModel
+        player={player}
+        isSelected={isSelected}
+        yaw={actionYaw}
+        yOffset={modelYOffset}
+        scaleMultiplier={runModelScale}
+        clipName={desiredClipName}
+        progress={actionProgress}
+      />
     </group>
   );
 });
 
 Player3D.displayName = 'Player3D';
 
-useGLTF.preload(IDLE_MODEL_PATH);
-useGLTF.preload(RUN_MODEL_PATH);
-useGLTF.preload(PASS_MODEL_PATH);
+useGLTF.preload(PLAYER_MODEL_PATH);
